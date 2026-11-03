@@ -3,6 +3,7 @@ from torch import optim, nn
 import torchinfo
 import torchmetrics
 import copy
+import inspect
 import os
 import sys
 import tempfile
@@ -19,6 +20,9 @@ import openwakeword
 from openwakeword.data import generate_adversarial_texts, augment_clips, mmap_batch_generator
 from openwakeword.utils import compute_features_from_generator
 from openwakeword.utils import AudioFeatures
+
+# torch 2.9+ defaults to the dynamo ONNX exporter, which needs the onnxscript package; keep the TorchScript exporter
+ONNX_EXPORT_KWARGS = {"dynamo": False} if "dynamo" in inspect.signature(torch.onnx.export).parameters else {}
 
 
 # Base model class for an openwakeword model
@@ -147,7 +151,7 @@ class Model(nn.Module):
         if self.n_classes == 1:
             # Save ONNX model
             torch.onnx.export(self.model.to("cpu"), torch.rand(self.input_shape)[None, ], output_path,
-                              output_names=[class_mapping])
+                              output_names=[class_mapping], **ONNX_EXPORT_KWARGS)
 
         elif self.n_classes >= 1:
             class M(nn.Module):
@@ -162,7 +166,7 @@ class Model(nn.Module):
 
             # Save ONNX model
             torch.onnx.export(M(), torch.rand(self.input_shape)[None, ], output_path,
-                              output_names=[class_mapping])
+                              output_names=[class_mapping], **ONNX_EXPORT_KWARGS)
 
     def lr_warmup_cosine_decay(self,
                                global_step,
@@ -427,7 +431,7 @@ class Model(nn.Module):
         logging.info(f"####\nSaving ONNX mode as '{os.path.join(output_dir, model_name + '.onnx')}'")
         model_to_save = copy.deepcopy(model)
         torch.onnx.export(model_to_save.to("cpu"), torch.rand(self.input_shape)[None, ],
-                          os.path.join(output_dir, model_name + ".onnx"), opset_version=13)
+                          os.path.join(output_dir, model_name + ".onnx"), opset_version=13, **ONNX_EXPORT_KWARGS)
 
         return None
 
@@ -606,35 +610,35 @@ if __name__ == '__main__':
         "--generate_clips",
         help="Execute the synthetic data generation process",
         action="store_true",
-        default="False",
+        default=False,
         required=False
     )
     parser.add_argument(
         "--augment_clips",
         help="Execute the synthetic data augmentation process",
         action="store_true",
-        default="False",
+        default=False,
         required=False
     )
     parser.add_argument(
         "--overwrite",
         help="Overwrite existing openwakeword features when the --augment_clips flag is used",
         action="store_true",
-        default="False",
+        default=False,
         required=False
     )
     parser.add_argument(
         "--train_model",
         help="Execute the model training process",
         action="store_true",
-        default="False",
+        default=False,
         required=False
     )
     parser.add_argument(
         "--convert_to_tflite",
         help="Convert the trained ONNX model to TFLite format",
         action="store_true",
-        default="False",
+        default=False,
         required=False
     )
 
