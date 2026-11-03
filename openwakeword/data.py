@@ -27,6 +27,7 @@ import itertools
 import pronouncing
 import torch
 import audiomentations
+from openwakeword import torchaudio_compat  # noqa: F401 (patches torchaudio.info/load for torchaudio>=2.9)
 import torch_audiomentations
 from numpy.lib.format import open_memmap
 from speechbrain.dataio.dataio import read_audio
@@ -932,6 +933,12 @@ def generate_adversarial_texts(input_text: str, N: int, include_partial_phrase: 
             import requests
             file_url = "https://public-asai-dl-models.s3.eu-central-1.amazonaws.com/DeepPhonemizer/en_us_cmudict_forward.pt"
             r = requests.get(file_url, stream=True)
+            if not r.ok:  # don't save an error page as the model file; it would break every later run
+                oov_words = [w for w, p in zip(input_text.split(), input_text_phones) if p == []]
+                raise RuntimeError(f"Could not download the DeepPhonemizer model (HTTP {r.status_code}) from {file_url}. "
+                                   f"Words not in CMUdict need it: {oov_words}. "
+                                   "Spell the target phrase with dictionary words, or place the model at "
+                                   f"{phonemizer_mdl_path}.")
             with open(phonemizer_mdl_path, "wb") as f:
                 for chunk in r.iter_content(chunk_size=2048):
                     if chunk:
